@@ -105,6 +105,7 @@
   @media(max-width:600px){.tp-btn{padding:18px 40px;font-size:1.25rem}}
   .tp-btn:hover{transform:translateY(-3px) scale(1.06);filter:brightness(1.08);animation-play-state:paused}
   .tp-btn.small{padding:8px 18px;font-size:.85rem;letter-spacing:0;margin:0 0 14px 12px;box-shadow:none;animation:none}
+  .favmark{position:absolute;bottom:12px;right:14px;color:var(--accent);font-size:.9rem}
   .tp-hint{color:var(--muted);font-size:.8rem;margin-top:12px}
   table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:10px}
   th,td{padding:10px 8px;text-align:left;border-bottom:1px solid var(--line)}
@@ -143,8 +144,8 @@
 <script>
 /* ================= 狀態 ================= */
 let LANG='zh';
-let state={view:'home',region:null,song:null,step:0,score:0,done:{},answered:{},filter:'all',query:'',visits:{}};
-try{const s=localStorage.getItem('tv_state');if(s){const p=JSON.parse(s);state.score=p.score||0;state.done=p.done||{};state.visits=p.visits||{};}}catch(e){}
+let state={view:'home',region:null,song:null,step:0,score:0,done:{},answered:{},filter:'all',query:'',visits:{},favs:{}};
+try{const s=localStorage.getItem('tv_state');if(s){const p=JSON.parse(s);state.score=p.score||0;state.done=p.done||{};state.visits=p.visits||{};state.favs=p.favs||{};}}catch(e){}
 
 /* L(): 內容可為字串(中文)或 {zh,en} 物件 */
 const L=x=>typeof x==='string'?x:(x[LANG]||x.zh);
@@ -163,6 +164,17 @@ const UI={
   trend:{zh:'🔥 當地熱門話題',en:'🔥 Trending locally'},
   trendNote:{zh:'📡 原型示範:範例快照(2026 年 6 月)。正式版將串接新聞/社群 API 每日更新。',en:'📡 Prototype: sample snapshot (June 2026). Production fetches live topics daily.'},
   teleport:{zh:'隨機傳送',en:'Random Teleport'},
+  favTitle:{zh:'我的收藏',en:'My Favorites'},
+  fav:{zh:'收藏',en:'Save'},
+  faved:{zh:'已收藏',en:'Saved'},
+  favEmpty:{zh:'還沒有收藏。在任何歌曲頁按「♡ 收藏」,喜歡的歌就會出現在這裡。',en:'Nothing saved yet. Tap "♡ Save" on any song page and it will appear here.'},
+  favPlay:{zh:'▶ 收藏連播',en:'▶ Play Favorites'},
+  favExport:{zh:'📋 匯出備份碼',en:'📋 Export Backup Code'},
+  favImport:{zh:'📥 匯入備份碼',en:'📥 Import Backup Code'},
+  favHint:{zh:'收藏存在這台裝置的瀏覽器裡。想跨裝置永久保存,可在歌曲頁點「在 YouTube 開啟」,儲存到你自己的 YouTube 播放清單;或用備份碼在其他裝置匯入。',en:'Favorites live in this browser. For permanent cross-device saving, open a song on YouTube and add it to your own playlist — or use the backup code on another device.'},
+  favImportPrompt:{zh:'貼上備份碼:',en:'Paste your backup code:'},
+  favImported:{zh:'已匯入',en:'Imported'},
+  favCopied:{zh:'備份碼已複製!',en:'Backup code copied!'},
   teleportHint:{zh:'讓演算法帶你去一個沒去過的音樂世界——去過的地方,再被抽中的機率會減半。',en:'Let fate pick a song — places you\'ve visited become half as likely each time.'},
   enNote:{zh:'',en:'ℹ️ New units are in Chinese first; English versions are being produced.'},
   openYT:{zh:'▶ 在 YouTube 開啟官方 MV',en:'▶ Open official MV on YouTube'},
@@ -12485,6 +12497,7 @@ function render(){
   document.getElementById('scoreBox').textContent='⭐ '+state.score;
   if(state.view==='home')renderHome();
   else if(state.view==='region')renderRegion();
+  else if(state.view==='favs')renderFavs();
   else renderSong();
 }
 function goHome(){state.view='home';render();window.scrollTo(0,0);}
@@ -12505,7 +12518,7 @@ function renderHome(){
     <div class="bigwm">Tune<span>Hop</span></div>
     <h1>${T('heroTitle')}</h1>
     <button class="tp-btn" onclick="teleport()">✈️ ${T('teleport')}</button>
-    <div style="margin-top:14px"><button class="tp-btn small" style="margin:0" onclick="playShuffle()">🔀 全站隨機播放</button></div>
+    <div style="margin-top:14px"><button class="tp-btn small" style="margin:0" onclick="playShuffle()">🔀 全站隨機播放</button> <button class="tp-btn small" style="margin:0;background:#333;color:var(--gold);box-shadow:none" onclick="state.view='favs';render();window.scrollTo(0,0)">❤ ${T('favTitle')} (${Object.keys(state.favs).length})</button></div>
     <div id="shuffleBox" style="text-align:left"></div></div>
     <div class="grid">${cards}</div>`;
 }
@@ -12522,7 +12535,7 @@ function songCards(){
     if(s.featured){
       return `<div class="song-card featured" onclick="openSong(${idx})">
         <span class="fbadge">${T('fullTag')}</span>
-        ${state.done[s.sid]?`<span class="donebadge">${T('doneTag')}</span>`:''}
+        ${state.done[s.sid]?`<span class="donebadge">${T('doneTag')}</span>`:''}${state.favs[s.sid]?`<span class="favmark">♥</span>`:''}
         <div class="st">${s.t}</div><div class="sa">${s.a} · ${s.y}</div>
         <span class="stag">${s.c}</span> <span class="stag">${s.tag}</span></div>`;
     }
@@ -12591,6 +12604,7 @@ function renderSong(){
   }
   app.innerHTML=`<button class="back" onclick="state.view='region';render();window.scrollTo(0,0)">${T('back')}</button>
     <button class="tp-btn small" onclick="teleport()">✈️ ${T('teleport')}</button>
+    <button class="tp-btn small" style="background:${state.favs[s.sid]?'var(--gold)':'#333'};color:${state.favs[s.sid]?'#141414':'var(--gold)'};box-shadow:none" onclick="toggleFav('${s.sid}')">${state.favs[s.sid]?'♥ '+T('faved'):'♡ '+T('fav')}</button>
     <div class="steps">${stepBtns}</div>${body}`;
 }
 
@@ -12633,7 +12647,7 @@ function speak(ri,si,pi){
 }
 if('speechSynthesis' in window){speechSynthesis.getVoices();}
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1600);}
-function save(){try{localStorage.setItem('tv_state',JSON.stringify({score:state.score,done:state.done,visits:state.visits}));}catch(e){}}
+function save(){try{localStorage.setItem('tv_state',JSON.stringify({score:state.score,done:state.done,visits:state.visits,favs:state.favs}));}catch(e){}}
 
 /* 一鍵連播:把該分類所有已驗證影片串成 YouTube 播放清單連續播放 */
 function playableIds(r){return r.songs.filter(s=>s.yt).map(s=>s.yt);}
@@ -12664,6 +12678,58 @@ function playAll(){
       <span style="color:var(--muted);font-size:.78rem">共 ${ids.length} 首自動連續播放;無法播放的影片會自動跳過。通勤請注意行車安全,建議上車前按下播放。</span>
     </div></div>`;
   box.scrollIntoView({behavior:'smooth'});
+}
+
+/* 收藏功能 */
+function toggleFav(sid){
+  if(state.favs[sid]){delete state.favs[sid];}else{state.favs[sid]=true;toast('♥ '+T('faved'));}
+  save();render();
+}
+function favList(){
+  const out=[];
+  REGIONS.forEach((r,ri)=>r.songs.forEach((s,si)=>{if(state.favs[s.sid])out.push({r,ri,s,si});}));
+  return out;
+}
+function renderFavs(){
+  const list=favList();
+  const cards=list.map(x=>`<div class="song-card featured" onclick="state.region=${x.ri};state.song=${x.si};state.step=0;state.view='song';render();window.scrollTo(0,0)">
+    <span class="fbadge">${x.r.flag}</span>
+    <div class="st">${x.s.t}</div><div class="sa">${x.s.a} · ${x.s.y}</div>
+    <span class="stag">${x.s.c||x.r.defc}</span></div>`).join('');
+  app.innerHTML=`<button class="back" onclick="goHome()">${T('back')}</button>
+    <h1 style="margin-bottom:4px">❤ ${T('favTitle')} (${list.length})</h1>
+    <div class="note">${T('favHint')}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
+      ${list.filter(x=>x.s.yt).length?`<button class="tp-btn small" style="margin:0" onclick="playFavs()">${T('favPlay')} (${list.filter(x=>x.s.yt).length})</button>`:''}
+      ${list.length?`<button class="chip" onclick="exportFavs()">${T('favExport')}</button>`:''}
+      <button class="chip" onclick="importFavs()">${T('favImport')}</button></div>
+    <div id="favBox"></div>
+    ${list.length?`<div class="songs">${cards}</div>`:`<div class="panel">${T('favEmpty')}</div>`}`;
+}
+function playFavs(){
+  const ids=favList().filter(x=>x.s.yt).map(x=>x.s.yt).slice(0,180);
+  if(!ids.length)return;
+  const box=document.getElementById('favBox');
+  box.innerHTML=`<div class="panel" style="margin-bottom:16px;padding:14px">
+    <div class="video-wrap" style="margin-bottom:10px"><iframe src="https://www.youtube.com/embed/${ids[0]}?playlist=${ids.slice(1).join(',')}&autoplay=1" allow="autoplay; encrypted-media" allowfullscreen title="favs"></iframe></div>
+    <button class="chip" onclick="document.getElementById('favBox').innerHTML=''">✕</button></div>`;
+  box.scrollIntoView({behavior:'smooth'});
+}
+function exportFavs(){
+  const code=Object.keys(state.favs).join(',');
+  const box=document.getElementById('favBox');
+  box.innerHTML=`<div class="panel" style="margin-bottom:16px;padding:14px">
+    <input class="search" style="width:100%" value="${code}" onclick="this.select()" readonly>
+    <div style="margin-top:8px"><button class="chip" onclick="document.getElementById('favBox').innerHTML=''">✕</button></div></div>`;
+  if(navigator.clipboard){navigator.clipboard.writeText(code).then(()=>toast(T('favCopied'))).catch(()=>{});}
+}
+function importFavs(){
+  const code=window.prompt(T('favImportPrompt'));
+  if(!code)return;
+  const valid=new Set(REGIONS.flatMap(r=>r.songs.map(s=>s.sid)));
+  let n=0;
+  code.split(/[\s,]+/).forEach(sid=>{if(valid.has(sid)&&!state.favs[sid]){state.favs[sid]=true;n++;}});
+  save();render();toast(T('favImported')+' +'+n+' ♥');
 }
 
 /* 隨機傳送:每被傳送到一次,該曲下次權重折半 (1 → 1/2 → 1/4 …) */
